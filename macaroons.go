@@ -35,7 +35,7 @@ type Macaroon struct {
 // signature.
 func NewMacaroon(identifier, location string) (*Macaroon, error) {
 	m := &Macaroon{Identifier: identifier, Location: location}
-	err := m.updateSignature()
+	err := m.initializeSignature()
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (m *Macaroon) AddFirstPartyCaveat(key, constraint string) error {
 
 	c := &FirstPartyCaveat{Key: key, Constraint: constraint}
 	m.FirstPartyCaveats = append(m.FirstPartyCaveats, *c)
-	err := m.updateSignature()
+	err := m.signFirstPartyCaveat()
 	return err
 }
 
@@ -84,18 +84,20 @@ func Unmarshal(macaroon []byte) (*Macaroon, error) {
 	return m, nil
 }
 
-func (m *Macaroon) updateSignature() error {
-	if m.Signature == nil && len(m.FirstPartyCaveats) == 0 {
-		key := deriveMacaroonKey(m.Identifier)
-		m.Signature = signature(key, []byte(m.Location))
-		return nil
-	} else {
-		// BUG(tdaniels): Lacks support for third-party caveats.
-		caveat := m.FirstPartyCaveats[len(m.FirstPartyCaveats)-1]
-		data := []byte(caveat.Key + caveat.Constraint)
-		m.Signature = signature(m.Signature, data)
-		return nil
-	}
+func (m *Macaroon) initializeSignature() error {
+	key := deriveMacaroonKey(m.Identifier)
+	m.Signature = signature(key, []byte(m.Location))
+	return nil
+}
 
+func (m *Macaroon) signFirstPartyCaveat() error {
+	// BUG(tdaniels): Lacks support for third-party caveats.
+	caveat := m.FirstPartyCaveats[len(m.FirstPartyCaveats)-1]
+	data := []byte(caveat.Key + caveat.Constraint)
+	m.Signature = signature(m.Signature, data)
+	return nil
+}
+
+func (m *Macaroon) signThirdPartyCaveat() error {
 	return invalidSignatureError
 }
