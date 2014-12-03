@@ -56,10 +56,15 @@ func (m *Macaroon) AddFirstPartyCaveat(key, constraint string) error {
 // (key, constraint) pair encrypted with the caveat root key.
 func (m *Macaroon) AddThirdPartyCaveat(cKey []byte, loc, key, constraint string) error {
 	vId, err := encrypt(m.Signature, cKey)
+	if err != nil {
+		return err
+	}
+
 	data, err := encrypt(cKey, []byte(key+constraint))
 	if err != nil {
 		return err
 	}
+
 	err = m.addCaveat(vId, loc, key, string(data))
 
 	return err
