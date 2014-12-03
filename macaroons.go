@@ -54,13 +54,18 @@ func (m *Macaroon) AddFirstPartyCaveat(key, constraint string) error {
 // the discharging principle. It generates a verification id by encrypting the
 // root key with the current macaroon signature. The constraint payload is the
 // (key, constraint) pair encrypted with the caveat root key.
-func (m *Macaroon) AddThirdPartyCaveat(cKey []byte, loc, key, constraint string) error {
-	vId, err := encrypt(m.Signature, cKey)
+func (m *Macaroon) AddThirdPartyCaveat(loc, key, constraint string) error {
+	cKey, err := newCaveatKey()
 	if err != nil {
 		return err
 	}
 
-	data, err := encrypt(cKey, []byte(key+constraint))
+	vId, err := encrypt(m.Signature, cKey[:])
+	if err != nil {
+		return err
+	}
+
+	data, err := encrypt(cKey[:], []byte(key+constraint))
 	if err != nil {
 		return err
 	}

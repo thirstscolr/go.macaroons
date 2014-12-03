@@ -50,7 +50,7 @@ func TestFirstPartyCaveatSignatureVerification(t *testing.T) {
 func TestThirdPartyCaveatSignatureVerification(t *testing.T) {
 	m, _ := NewMacaroon(identifier, location)
 
-	m.AddThirdPartyCaveat([]byte(cKey), location, "expires", time.Now().String())
+	m.AddThirdPartyCaveat(location, "expires", time.Now().String())
 	err := VerifySignature(m)
 	if err != nil {
 		t.Errorf("Error verifying macaroon: %s", err)

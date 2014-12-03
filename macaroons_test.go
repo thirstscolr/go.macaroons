@@ -41,7 +41,7 @@ func TestAddFirstPartyCaveat(t *testing.T) {
 
 func TestAddThirdPartyCaveat(t *testing.T) {
 	m, _ := NewMacaroon(identifier, location)
-	err := m.AddThirdPartyCaveat([]byte(cKey), location, "authenticated", "true")
+	err := m.AddThirdPartyCaveat(location, "authenticated", "true")
 	if err != nil {
 		t.Errorf("Error adding third party caveat: %s", err)
 	}

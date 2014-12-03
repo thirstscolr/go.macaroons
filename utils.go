@@ -4,8 +4,13 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+)
+
+const (
+	keyLength = 32
 )
 
 func deriveMacaroonKey(identifier string) []byte {
@@ -20,6 +25,16 @@ func signature(key, data []byte) []byte {
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(data))
 	return mac.Sum(nil)
+}
+
+func newCaveatKey() (*[keyLength]byte, error) {
+	var key [keyLength]byte
+	_, err := rand.Reader.Read(key[:])
+	if err != nil {
+		return nil, err
+	}
+
+	return &key, nil
 }
 
 func encrypt(key, data []byte) (string, error) {
