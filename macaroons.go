@@ -16,18 +16,21 @@ const (
 var (
 	maxCaveatsError       = errors.New("Exceeded caveat limit")
 	invalidSignatureError = errors.New("Invalid macaroon signature")
+	decryptionError       = errors.New("Decryption failure")
 )
 
-type FirstPartyCaveat struct {
-	Key        string `json:"key"`
-	Constraint string `json:"constraint"`
+type Caveat struct {
+	VerificationId string `json:"verification_id"`
+	Location       string `json:"location"`
+	Key            string `json:"key"`
+	Constraint     string `json:"constraint"`
 }
 
 type Macaroon struct {
-	Identifier        string             `json:"id"`
-	Location          string             `json:"location"`
-	FirstPartyCaveats []FirstPartyCaveat `json:"fp_caveats"`
-	Signature         []byte             `json:"signature"`
+	Identifier string   `json:"id"`
+	Location   string   `json:"location"`
+	Caveats    []Caveat `json:"caveats"`
+	Signature  []byte   `json:"signature"`
 }
 
 // NewMacaroon returns a new macaroon with identifier and location. If the
@@ -35,11 +38,7 @@ type Macaroon struct {
 // signature.
 func NewMacaroon(identifier, location string) (*Macaroon, error) {
 	m := &Macaroon{Identifier: identifier, Location: location}
-	err := m.initializeSignature()
-	if err != nil {
-		return nil, err
-	}
-
+	m.Signature = deriveMacaroonKey(m.Identifier)
 	return m, nil
 }
 
@@ -47,13 +46,22 @@ func NewMacaroon(identifier, location string) (*Macaroon, error) {
 // function handles updating the macaroon's signature if the caveat is
 // successfully added.
 func (m *Macaroon) AddFirstPartyCaveat(key, constraint string) error {
-	if len(m.FirstPartyCaveats) >= maxCaveats {
-		return maxCaveatsError
-	}
+	err := m.addCaveat("", "", key, constraint)
+	return err
+}
 
-	c := &FirstPartyCaveat{Key: key, Constraint: constraint}
-	m.FirstPartyCaveats = append(m.FirstPartyCaveats, *c)
-	err := m.signFirstPartyCaveat()
+// AddThirdPartyCaveat takes a caveat root key, constraint, and a location of
+// the discharging principle. It generates a verification id by encrypting the
+// root key with the current macaroon signature. The constraint payload is the
+// (key, constraint) pair encrypted with the caveat root key.
+func (m *Macaroon) AddThirdPartyCaveat(cKey []byte, loc, key, constraint string) error {
+	vId, err := encrypt(m.Signature, cKey)
+	data, err := encrypt(cKey, []byte(key+constraint))
+	if err != nil {
+		return err
+	}
+	err = m.addCaveat(vId, loc, key, string(data))
+
 	return err
 }
 
@@ -84,20 +92,23 @@ func Unmarshal(macaroon []byte) (*Macaroon, error) {
 	return m, nil
 }
 
-func (m *Macaroon) initializeSignature() error {
-	key := deriveMacaroonKey(m.Identifier)
-	m.Signature = signature(key, []byte(m.Location))
-	return nil
+func (m *Macaroon) addCaveat(vId, loc, key, constraint string) error {
+	if len(m.Caveats) >= maxCaveats {
+		return maxCaveatsError
+	}
+
+	c := &Caveat{VerificationId: vId,
+		Location:   loc,
+		Key:        key,
+		Constraint: constraint}
+
+	m.Caveats = append(m.Caveats, *c)
+	err := m.signCaveat(c)
+	return err
 }
 
-func (m *Macaroon) signFirstPartyCaveat() error {
-	// BUG(tdaniels): Lacks support for third-party caveats.
-	caveat := m.FirstPartyCaveats[len(m.FirstPartyCaveats)-1]
-	data := []byte(caveat.Key + caveat.Constraint)
+func (m *Macaroon) signCaveat(c *Caveat) error {
+	data := []byte(c.VerificationId + c.Key + c.Constraint)
 	m.Signature = signature(m.Signature, data)
 	return nil
-}
-
-func (m *Macaroon) signThirdPartyCaveat() error {
-	return invalidSignatureError
 }

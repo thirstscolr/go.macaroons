@@ -7,7 +7,8 @@ import (
 
 const (
 	location   = "squareup.com"
-	identifier = "s2s-identifier"
+	identifier = "identifier"
+	cKey       = "caveat-root-key!"
 )
 
 func TestNewMacaroon(t *testing.T) {
@@ -33,8 +34,20 @@ func TestAddFirstPartyCaveat(t *testing.T) {
 		t.Errorf("Error adding first party caveat: %s", err)
 	}
 
-	if len(m.FirstPartyCaveats) != 1 {
+	if len(m.Caveats) != 1 {
 		t.Error("Error adding first party caveat")
+	}
+}
+
+func TestAddThirdPartyCaveat(t *testing.T) {
+	m, _ := NewMacaroon(identifier, location)
+	err := m.AddThirdPartyCaveat([]byte(cKey), location, "authenticated", "true")
+	if err != nil {
+		t.Errorf("Error adding third party caveat: %s", err)
+	}
+
+	if len(m.Caveats) != 1 {
+		t.Error("Error adding third party caveat")
 	}
 }
 
@@ -43,11 +56,11 @@ func TestCaveatLimit(t *testing.T) {
 
 	for c := 0; c < maxCaveats; c++ {
 		m.AddFirstPartyCaveat("key_%i"+string(c), "constraint_"+string(c))
-		err := Verify(m)
+		err := VerifySignature(m)
 		if err != nil {
 			if err != maxCaveatsError {
 				t.Errorf("Error adding caveat: %s", err)
-			} else if c == maxCaveats-1 {
+			} else if len(m.Caveats) == maxCaveats {
 				return
 			}
 		}
@@ -56,9 +69,8 @@ func TestCaveatLimit(t *testing.T) {
 	t.Error("Error testing caveat limit")
 }
 
-func TestSerialization(t *testing.T) {
+func TestBasicSerialization(t *testing.T) {
 	m, _ := NewMacaroon(identifier, location)
-	m.AddFirstPartyCaveat("expires", time.Now().String())
 
 	mm, err := m.Marshal()
 	if err != nil {
@@ -78,7 +90,7 @@ func TestSerialization(t *testing.T) {
 		t.Error("Error marshaling identifier")
 	}
 
-	err = Verify(rm)
+	err = VerifySignature(rm)
 	if err != nil {
 		t.Error("Error validating signature after unmarshaling")
 	}

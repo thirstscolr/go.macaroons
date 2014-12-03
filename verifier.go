@@ -2,22 +2,33 @@ package macaroons
 
 import (
 	"crypto/hmac"
-	"crypto/sha256"
+	"strings"
 )
 
-// Verify calculates the signature of the provided macaroon and compares it to
-// the macaroon's signature field to determine the validity of the contained
-// caveats and the overall integrity of the credential.
-func Verify(m *Macaroon) error {
-	if len(m.FirstPartyCaveats) >= maxCaveats {
+// VerifySignature calculates the signature of the provided macaroon and
+// compares it to the macaroon's signature field to determine the validity of
+// the contained caveats and the overall integrity of the credential.
+func VerifySignature(m *Macaroon) error {
+	// BUG(tdaniels): VerifySignature should be private (verifySignature)
+	// and will be called by Verify once it is implemented.
+	if len(m.Caveats) >= maxCaveats {
 		return maxCaveatsError
 	}
 
-	key := deriveMacaroonKey(m.Identifier)
-	sig := signature(key, []byte(m.Location))
+	sig := deriveMacaroonKey(m.Identifier)
 
-	for _, caveat := range m.FirstPartyCaveats {
-		data := []byte(caveat.Key + caveat.Constraint)
+	for _, c := range m.Caveats {
+		// Third-party caveat
+		if len(c.VerificationId) > 0 {
+			err := verifyThirdPartyCaveat(sig, &c)
+			if err != nil {
+				return err
+			}
+		}
+
+		// BUG(tdaniels): Verifying caveat constraints are met is not
+		// yet implemented.
+		data := []byte(c.VerificationId + c.Key + c.Constraint)
 		sig = signature(sig, data)
 	}
 
@@ -28,16 +39,24 @@ func Verify(m *Macaroon) error {
 	return invalidSignatureError
 }
 
-func deriveMacaroonKey(identifier string) []byte {
-	// BUG(tdaniels): Hard coded master key.
-	mKey := []byte("secret")
-	derivedKey := signature(mKey, []byte(identifier))
+func verifyThirdPartyCaveat(sig []byte, c *Caveat) error {
+	cKey, err := decrypt(sig, c.VerificationId)
+	if err != nil {
+		return err
+	}
 
-	return derivedKey
-}
+	constraint, err := decrypt(cKey, c.Constraint)
+	if err != nil {
+		return err
+	}
 
-func signature(key, data []byte) []byte {
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(data))
-	return mac.Sum(nil)
+	if !strings.HasPrefix(string(constraint), c.Key) {
+		return decryptionError
+	}
+
+	// BUG(tdaniels): Additional verification once
+	// third-party caveats is successfully decrypted is not
+	// yet implemented.
+
+	return nil
 }
